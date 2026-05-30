@@ -1,6 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'relation.freezed.dart';
+part 'relation.g.dart';
 
 /// Crow's-foot cardinality for one end of a [Relation].
 enum Cardinality {
@@ -22,6 +23,9 @@ abstract class RelationEnd with _$RelationEnd {
     required String entityId,
     required Cardinality cardinality,
   }) = _RelationEnd;
+
+  factory RelationEnd.fromJson(Map<String, dynamic> json) =>
+    _$RelationEndFromJson(json);
 }
 
 /// Maps one foreign-key field on the child to the field it references on the
@@ -32,6 +36,9 @@ abstract class FieldLink with _$FieldLink {
     required String childFieldId,
     required String parentFieldId,
   }) = _FieldLink;
+
+  factory FieldLink.fromJson(Map<String, dynamic> json) =>
+    _$FieldLinkFromJson(json);
 }
 
 /// A connection between two entities. The child holds the foreign key that
@@ -60,4 +67,7 @@ abstract class Relation with _$Relation {
     /// Optional verb label, e.g. "places", "belongs to".
     String? name,
   }) = _Relation;
+
+  factory Relation.fromJson(Map<String, dynamic> json) =>
+    _$RelationFromJson(json);
 }

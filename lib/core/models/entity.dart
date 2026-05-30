@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:talonflow/core/models/entity_field.dart';
 
 part 'entity.freezed.dart';
+part 'entity.g.dart';
 
 /// A table, drawn as a node on the diagram canvas.
 @freezed
@@ -18,4 +19,7 @@ abstract class Entity with _$Entity {
     @Default(<EntityField>[]) List<EntityField> fields,
     String? comment,
   }) = _Entity;
+
+  factory Entity.fromJson(Map<String, dynamic> json) =>
+    _$EntityFromJson(json);
 }

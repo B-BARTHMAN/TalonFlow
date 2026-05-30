@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:talonflow/core/models/field_type.dart';
 
 part 'entity_field.freezed.dart';
+part 'entity_field.g.dart';
 
 /// A single column of an [Entity].
 ///
@@ -29,4 +30,7 @@ abstract class EntityField with _$EntityField {
     String? check,
     String? comment,
   }) = _EntityField;
+
+  factory EntityField.fromJson(Map<String, dynamic> json) =>
+    _$EntityFieldFromJson(json);
 }

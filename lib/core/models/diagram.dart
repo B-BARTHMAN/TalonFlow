@@ -3,6 +3,7 @@ import 'package:talonflow/core/models/entity.dart';
 import 'package:talonflow/core/models/relation.dart';
 
 part 'diagram.freezed.dart';
+part 'diagram.g.dart';
 
 /// A single ER diagram — the whole graph the editor loads, edits and saves.
 @freezed
@@ -13,4 +14,7 @@ abstract class Diagram with _$Diagram {
     @Default(<Entity>[]) List<Entity> entities,
     @Default(<Relation>[]) List<Relation> relations,
   }) = _Diagram;
+
+  factory Diagram.fromJson(Map<String, dynamic> json) =>
+    _$DiagramFromJson(json);
 }

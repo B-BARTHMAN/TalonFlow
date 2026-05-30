@@ -1,6 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'field_type.freezed.dart';
+part 'field_type.g.dart';
 
 /// The SQL data type of an [EntityField].
 ///
@@ -8,7 +9,7 @@ part 'field_type.freezed.dart';
 /// carry their own configuration and can never hold an invalid combination —
 /// a `boolean` simply has nowhere to put a length. Handle every case with an
 /// exhaustive `switch`; the compiler will tell you when you miss one.
-@freezed
+@Freezed(unionKey: 'type', unionValueCase: FreezedUnionCase.snake)
 sealed class FieldType with _$FieldType {
   // ── Integers ──────────────────────────────────────────────────────────
   const factory FieldType.smallInt() = SmallIntType;
@@ -45,4 +46,7 @@ sealed class FieldType with _$FieldType {
 
   /// A user-defined enum, e.g. `('active', 'archived', 'banned')`.
   const factory FieldType.enumeration(List<String> values) = EnumType;
+
+  factory FieldType.fromJson(Map<String, dynamic> json) =>
+      _$FieldTypeFromJson(json);
 }

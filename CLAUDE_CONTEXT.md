@@ -29,43 +29,70 @@ to JSON file, load = deserialize from JSON file. Keep it simple.
 
 ## Architecture
 
+Follows [Flutter's official app architecture guide](https://docs.flutter.dev/app-architecture/guide),
+with Cubit replacing ViewModel.
+
+### Layers
+
+```
+UI (View + Cubit)  →  Repository  →  Service
+```
+
+- **View** — widgets and screens. Reads state from a Cubit, calls Cubit methods. No logic.
+- **Cubit** — feature state and the methods that change it. Depends on repositories only.
+- **Repository** — plain class. Orchestrates services. The only thing Cubits talk to.
+- **Service** — plain class. Raw I/O against one source (filesystem). Throws on error.
+
+Only Cubits hold UI-observable state. Repositories and services are stateless plain classes.
+
+### Error handling
+Services throw. Repositories catch and rethrow (or wrap when needed). Cubits catch and emit error states.
+
+### Cubit scope
+- **App-wide** — provided once at the app root via `BlocProvider`. State that must outlive any single screen.
+  - `DiagramListCubit`
+- **Feature-scoped** — provided at the screen level, disposed on pop.
+  - `DiagramEditorCubit`
+
+Repositories are always app-wide via `RepositoryProvider`. They have no state, only methods.
+
 ### Folder structure
+
 ```
 lib/
-  app.dart
   main.dart
+  app.dart
   config/
     routing/
     theme/
   core/
-    models/          # Freezed data classes (shared across features)
-    services/        # File I/O, serialization
+    models/          # Freezed data classes shared across features
+    services/        # Raw I/O — one source per service
+    repositories/    # Orchestration — what Cubits depend on
+    errors/          # Failure sealed class (add when needed)
+    widgets/         # Shared UI widgets
   features/
     <feature>/
+      cubit/
       ui/
         screens/
         widgets/
-      bloc/          # or cubit/
 ```
 
 ### Data flow
+
 ```
 JSON file on disk
-  ↕  (service: load/save)
-Diagram model (immutable Freezed object)
-  ↕  (Cubit/Bloc: holds current diagram, exposes mutations)
+  ↕  (DiagramFileService: load/save)
+DiagramRepository
+  ↕  (exposes clean API, handles errors)
+Cubit (holds current state, exposes intent-named methods)
+  ↕
 UI (reads state, calls cubit methods)
 ```
 
-No repository layer — there's no database to abstract over. A simple
-`DiagramFileService` handles reading/writing JSON files.
-
-### IDs
-UUID v4 strings (use the `uuid` package). Generated client-side when creating
-entities, fields, or relations.
-
-## Data model (lib/core/models/)
-Five files, all Freezed 3.x:
+## Data model (`lib/core/models/`)
+Five files, all Freezed 3.x with `json_serializable`:
 
 - **`diagram.dart`** — `id`, `name`, `List<Entity>`, `List<Relation>`
 - **`entity.dart`** — `id`, `name`, `x`/`y` (canvas pos), `List<EntityField>`,
@@ -75,7 +102,7 @@ Five files, all Freezed 3.x:
   `defaultValue`, `check`, `comment`. FK-ness is derived from relations.
 - **`field_type.dart`** — sealed union of SQL types. Parameterised where it
   matters: `varchar(length)`, `decimal(precision, scale)`,
-  `enumeration(values)`.
+  `enumeration(values)`. Serialized with `unionKey: 'type'`, `unionValueCase: FreezedUnionCase.snake`.
 - **`relation.dart`** — `parent` and `child` `RelationEnd`s (each with
   `entityId` + `Cardinality`), `List<FieldLink>` for FK column mapping,
   `onDelete`/`onUpdate` `ReferentialAction`, `isIdentifying`, optional `name`.
@@ -95,6 +122,7 @@ Five files, all Freezed 3.x:
 ### Scoping
 - **One file at a time.** Never dump a whole feature. I'll ask for the next
   file when I'm ready.
+- **Simple changes** — state what to add and where, no need to reprint the whole file.
 
 ### Code style
 - One class per file, keep files small.
@@ -102,21 +130,23 @@ Five files, all Freezed 3.x:
 - Exhaustive `switch` on sealed unions — never use a default/wildcard case.
 - Follow very_good_analysis lint rules.
 - Prefer `const` constructors.
+- Cubits expose intent-named methods (`loadDiagrams()`, `addDiagram(...)`). No setters, no `BuildContext`.
+- Side effects (navigation, snackbars) are the View's job via `BlocListener`.
 
 ### What NOT to do
-- No `createdAt` / `updatedAt` / `modifiedBy` or any metadata fields unless I
-  explicitly ask. This is a local-only app.
+- No `createdAt` / `updatedAt` / `modifiedBy` or any metadata fields unless
+  explicitly asked. This is a local-only app.
 - No fields "that might be useful later" — only what's needed right now.
 - No `json_key`, no `JsonConverter` unless strictly necessary.
 - No hardcoded pixel values for layout — use theme, fractions, or flex.
-- No over-engineered abstractions (no repository pattern wrapping a single
-  file read, no dependency injection framework).
+- No over-engineered abstractions beyond the three-layer architecture above.
 - Don't suggest adding packages I haven't approved.
 - Don't reorganize my folder structure without asking.
 
 ### Communication
 - Keep explanations short. If I need more detail I'll ask.
 - When showing code, show the full file — no "// ... rest unchanged" elisions.
+- Simple changes: state what to add/change and where, skip reprinting the file.
 - If something is ambiguous, ask one question, don't guess.
 
 ## Current file tree
@@ -138,11 +168,19 @@ lib/
       entity_field.dart
       field_type.dart
       relation.dart
+    services/        # next: diagram_file_service.dart
+    repositories/    # next: diagram_repository.dart
   features/
     home/
       ui/
         screens/
           home_screen.dart
+    sidebar/
+      ui/
         widgets/
+          diagram_list.dart
           sidebar.dart
+          sidebar_card.dart
+          sidebar_footer.dart
+          sidebar_header.dart
 ```
