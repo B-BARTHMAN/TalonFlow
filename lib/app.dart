@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:talonflow/config/routing/router.dart';
 import 'package:talonflow/config/theme/app_theme.dart';
 import 'package:talonflow/core/repositories/diagram_repository.dart';
-import 'package:talonflow/core/services/diagram_file_Service.dart';
+import 'package:talonflow/core/services/diagram_file_service.dart';
 import 'package:talonflow/features/diagrams/cubit/diagram_list_cubit.dart';
 
 class TalonFlowApp extends StatelessWidget {

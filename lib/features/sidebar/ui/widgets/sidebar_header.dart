@@ -11,9 +11,7 @@ class SidebarHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
       child: Row(
         children: [
-          const Text(
-            'Diagrams',
-          ),
+          Text('Diagrams', style: Theme.of(context).textTheme.titleMedium),
           const Spacer(),
           IconButton(
             onPressed: onClose,

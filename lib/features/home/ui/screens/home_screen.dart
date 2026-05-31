@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:talonflow/features/sidebar/ui/widgets/sidebar.dart';
+import 'package:talonflow/features/editor/ui/widgets/diagram_canvas.dart';
+import 'package:talonflow/features/sidebar/ui/sidebar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,7 +12,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _sidebarOpen = false;
 
-  void _toggleSidebar() => setState(() => _sidebarOpen = !_sidebarOpen);
+  void _openSidebar() => setState(() => _sidebarOpen = true);
   void _closeSidebar() => setState(() => _sidebarOpen = false);
 
   @override
@@ -21,32 +22,17 @@ class _HomeScreenState extends State<HomeScreen> {
         Scaffold(
           appBar: AppBar(
             leading: IconButton(
-              onPressed: _toggleSidebar,
+              onPressed: _openSidebar,
               icon: const Icon(Icons.menu_rounded),
             ),
           ),
-          body: const Placeholder(),
+          body: const DiagramCanvas(),
           floatingActionButton: FloatingActionButton(
             onPressed: () {},
             child: const Icon(Icons.add),
           ),
         ),
-
-        // Overlay — tap to dismiss. Conditional so it's not in the hit-test
-        // tree at all when the sidebar is closed.
-        if (_sidebarOpen)
-          GestureDetector(
-            onTap: _closeSidebar,
-            behavior: HitTestBehavior.opaque,
-            child: Container(color: Colors.black54),
-          ),
-
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          child: Sidebar(isOpen: _sidebarOpen, onClose: _closeSidebar),
-        ),
+        Sidebar(isOpen: _sidebarOpen, onClose: _closeSidebar),
       ],
     );
   }

@@ -1,5 +1,5 @@
 import 'package:talonflow/core/models/diagram.dart';
-import 'package:talonflow/core/services/diagram_file_Service.dart';
+import 'package:talonflow/core/services/diagram_file_service.dart';
 import 'package:uuid/uuid.dart';
 
 class DiagramRepository {
