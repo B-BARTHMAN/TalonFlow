@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import 'package:talonflow/config/routing/routes.dart';
 import 'package:talonflow/core/models/diagram.dart';
 import 'package:talonflow/features/editor/cubit/diagram_editor_cubit.dart';
 import 'package:talonflow/features/editor/ui/widgets/entity_node.dart';
 
 /// The zoomable, pannable surface showing a diagram's entities — and, later,
-/// the relations drawn between them. Nodes can be dragged to reposition.
+/// the relations drawn between them. Tap a node to edit it, drag to move it.
 class DiagramSurface extends StatefulWidget {
   const DiagramSurface({required this.diagram, super.key});
 
@@ -18,7 +20,6 @@ class DiagramSurface extends StatefulWidget {
 }
 
 class _DiagramSurfaceState extends State<DiagramSurface> {
-  // A large fixed working area to pan within; a diagram constant.
   static const _canvasSize = 5000.0;
 
   final _controller = TransformationController();
@@ -29,9 +30,11 @@ class _DiagramSurfaceState extends State<DiagramSurface> {
     super.dispose();
   }
 
+  void _openEntity(String id) {
+    unawaited(context.push(Routes.entityPath(id)));
+  }
+
   void _onNodeDrag(String id, Offset delta) {
-    // Screen delta → canvas delta: undo the current zoom so a node tracks the
-    // pointer at any scale.
     final scale = _controller.value.getMaxScaleOnAxis();
     context.read<DiagramEditorCubit>().moveEntity(
       id,
@@ -62,6 +65,7 @@ class _DiagramSurfaceState extends State<DiagramSurface> {
                 left: entity.x,
                 top: entity.y,
                 child: GestureDetector(
+                  onTap: () => _openEntity(entity.id),
                   onPanUpdate: (details) =>
                       _onNodeDrag(entity.id, details.delta),
                   onPanEnd: (_) => _commitLayout(),
