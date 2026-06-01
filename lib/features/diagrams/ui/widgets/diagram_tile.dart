@@ -4,6 +4,7 @@ import 'package:talonflow/core/models/diagram.dart';
 import 'package:talonflow/features/diagrams/cubit/diagram_list_cubit.dart';
 import 'package:talonflow/features/diagrams/ui/dialogs/confirm_delete_dialog.dart';
 import 'package:talonflow/features/diagrams/ui/dialogs/diagram_name_dialog.dart';
+import 'package:talonflow/features/editor/cubit/diagram_editor_cubit.dart';
 
 class DiagramTile extends StatelessWidget {
   const DiagramTile({required this.diagram, super.key});
@@ -16,7 +17,9 @@ class DiagramTile extends StatelessWidget {
       dense: true,
       leading: const Icon(Icons.account_tree_outlined),
       title: Text(diagram.name),
-      onTap: () {},
+      onTap: () async {
+        await context.read<DiagramEditorCubit>().openDiagram(diagram.id);
+      },
       trailing: PopupMenuButton<_TileAction>(
         onSelected: (action) async {
           final cubit = context.read<DiagramListCubit>();
