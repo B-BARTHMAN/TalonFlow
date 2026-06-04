@@ -1,19 +1,18 @@
+import 'package:talonflow/core/id.dart';
 import 'package:talonflow/core/models/diagram.dart';
 import 'package:talonflow/core/services/diagram_file_service.dart';
-import 'package:uuid/uuid.dart';
 
 class DiagramRepository {
   DiagramRepository({required DiagramFileService service}) : _service = service;
 
   final DiagramFileService _service;
-  static const _uuid = Uuid();
 
   Future<List<Diagram>> loadAll() => _service.loadAll();
 
   Future<Diagram> load(String id) => _service.load(id);
 
   Future<Diagram> create(String name) async {
-    final diagram = Diagram(id: _uuid.v4(), name: name);
+    final diagram = Diagram(id: Id.generate(), name: name);
     await _service.save(diagram);
     return diagram;
   }

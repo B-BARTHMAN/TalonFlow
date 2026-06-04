@@ -1,186 +1,194 @@
-# TalonFlow — Project Context
+# TalonFlow — Architecture & Conventions
 
 ## What this app does
-ER diagram editor in crow's foot notation. You create diagrams, place entity
-nodes on a canvas, define their fields (name, type, constraints, PK, etc.),
-and draw relations between them with cardinality, referential actions, and
-identifying/non-identifying distinction. Basically: visually define a
-relational database schema.
+ER diagram editor in crow's-foot notation. Create diagrams, place entity nodes
+on a canvas, define their fields (name, SQL type, constraints, PK), and draw
+relations with cardinality, referential actions, and identifying/non-identifying
+distinction. In short: visually define a relational schema.
 
 ## Platforms
 macOS, Windows, Linux, iOS, Android. No web.
 
 ## Stack
-- **Flutter / Dart 3** (SDK ^3.11.5)
-- **flutter_bloc** — Cubit for simple state, Bloc for complex (prefer Cubit
-  when there's no meaningful event history to trace)
-- **go_router** — routing, StatefulShellRoute for the shell scaffold
-- **freezed + freezed_annotation** — immutable data classes. Freezed 3.x
-  syntax: `abstract class` for single classes, `sealed class` for unions.
-  Run `dart run build_runner build --delete-conflicting-outputs` after changes.
-- **json_serializable** — for serializing Freezed models to/from JSON
-- **very_good_analysis** — strict linting, follow it
-- **Material 3** — use default M3 widgets, no custom design system
+- **Flutter / Dart 3** (SDK ^3.11.5). Material 3 is the default — don't set
+  `useMaterial3`.
+- **flutter_bloc** — Cubit for everything; reach for Bloc only if an event
+  history genuinely needs tracing.
+- **go_router** — plain routes, no shell. Entity detail is a child route.
+- **freezed** — immutable models and sealed state unions. Run
+  `dart run build_runner build --delete-conflicting-outputs` after changing any
+  `@freezed` type.
+- **json_serializable** — JSON for the models that persist.
+- **very_good_analysis** — strict lints; follow them.
 
-## Persistence
-**No Drift / no SQLite.** Each diagram is a single JSON file saved via
-`path_provider`. The in-memory state is a `Diagram` object; save = serialize
-to JSON file, load = deserialize from JSON file. Keep it simple.
+## The big picture
+One screen (the editor) hosts a canvas; a drawer lists diagrams. Two cubits own
+all UI state and are provided once at the root. Each diagram persists as one
+JSON file.
 
-## Architecture
+### Layers — strict, one direction
+View (widgets)  →  Cubit  →  Repository  →  Service  →  disk
+- **View** — widgets/screens. Reads state from a Cubit, calls intent-named Cubit
+  methods, and performs side effects (navigation, snackbars) via `BlocListener`.
+  No business logic, no I/O.
+- **Cubit** — owns one feature's UI-observable state and the intent-named methods
+  that change it. Depends only on repositories. Catches errors and turns them
+  into states. No `BuildContext`, no setters.
+- **Repository** — plain, stateless class. Orchestrates services and generates
+  ids (`Id.generate()`). The only thing a Cubit talks to. Forwards/wraps service
+  errors.
+- **Service** — plain, stateless class. Raw I/O against one source (filesystem).
+  Throws on failure.
 
-Follows [Flutter's official app architecture guide](https://docs.flutter.dev/app-architecture/guide),
-with Cubit replacing ViewModel.
+Only Cubits hold UI-observable state. Repositories and services are stateless.
 
-### Layers
+### State is a sealed union
+Each feature's UI-observable state is a Freezed `sealed class` with one variant
+per real situation — never a single class with a status enum plus nullable
+fields. Impossible states ("loaded but null diagram") become unrepresentable,
+and the UI `switch`es exhaustively with no force-unwraps and no wildcard cases.
 
+```dart
+@freezed
+sealed class DiagramEditorState with _$DiagramEditorState {
+  const factory DiagramEditorState.initial() = DiagramEditorInitial;
+  const factory DiagramEditorState.loading() = DiagramEditorLoading;
+  const factory DiagramEditorState.loaded(Diagram diagram, {String? saveError})
+      = DiagramEditorLoaded;
+  const factory DiagramEditorState.error(String message) = DiagramEditorError;
+
+  const DiagramEditorState._();
+
+  Diagram? get diagramOrNull => switch (this) {
+        DiagramEditorLoaded(:final diagram) => diagram,
+        DiagramEditorInitial() ||
+        DiagramEditorLoading() ||
+        DiagramEditorError() => null,
+      };
+}
 ```
-UI (View + Cubit)  →  Repository  →  Service
+Add the `const X._();` private constructor only when a state needs a convenience
+getter; keep such getters small and exhaustive. The View switches on the state
+itself, destructuring fields (`DiagramEditorLoaded(:final diagram)`).
+
+### Cubit method shape
+Methods are intent-named (`openDiagram`, `addEntity`, `renameEntity`) and
+one-liners where possible. The real data work lives in pure transforms, so the
+Cubit just picks one, emits, and persists:
+```dart
+Future<void> deleteEntity(String id) => _edit((d) => d.removeEntity(id));
 ```
+`_edit` reads the current diagram, applies the transform, emits the new state
+optimistically, then saves.
 
-- **View** — widgets and screens. Reads state from a Cubit, calls Cubit methods. No logic.
-- **Cubit** — feature state and the methods that change it. Depends on repositories only.
-- **Repository** — plain class. Orchestrates services. The only thing Cubits talk to.
-- **Service** — plain class. Raw I/O against one source (filesystem). Throws on error.
-
-Only Cubits hold UI-observable state. Repositories and services are stateless plain classes.
-
-### Error handling
-Services throw. Repositories catch and rethrow (or wrap when needed). Cubits catch and emit error states.
-
-### Cubit scope
-- **App-wide** — provided once at the app root via `BlocProvider`. State that must outlive any single screen.
-  - `DiagramListCubit`
-- **Feature-scoped** — provided at the screen level, disposed on pop.
-  - `DiagramEditorCubit`
-
-Repositories are always app-wide via `RepositoryProvider`. They have no state, only methods.
-
-### Folder structure
-
+### Model transforms are pure extensions
+Models (`core/models/`) are pure data — Freezed only, no logic. Anything that
+*changes* a model is a pure extension that returns a new value and does no I/O.
+Editor transforms live in `features/editor/cubit/diagram_edits.dart`:
+```dart
+extension DiagramEdits on Diagram {
+  Diagram removeEntity(String id) => copyWith(
+        entities: entities.where((e) => e.id != id).toList(),
+        relations: relations
+            .where((r) => r.parent.entityId != id && r.child.entityId != id)
+            .toList(),
+      );
+}
 ```
+These are unit-testable without Flutter or bloc.
+
+### Persistence
+No SQLite/Drift. One JSON file per diagram under the app documents directory.
+`DiagramFileService` does the (fully async) file I/O and throws on error; a
+single corrupt file is skipped, not fatal. `DiagramRepository` adds id
+generation and convenience (rename = `copyWith` + save).
+
+### Error handling — end to end
+Service throws → Repository forwards → Cubit catches and emits a state:
+- a load failure becomes an `error` state (the canvas shows the message);
+- a *save* failure keeps the diagram on screen but attaches `saveError`, which
+  the editor screen surfaces as a snackbar via `BlocListener`. Saves are never
+  silently swallowed.
+
+### Provisioning
+Both cubits are app-wide, created once in `app.dart` under a `RepositoryProvider`
++ `MultiBlocProvider`. There's one open diagram at a time, so the editor cubit is
+effectively a singleton; `closeDiagram()` resets it rather than disposing.
+
+### Routing
+`go_router`, plain routes — no `StatefulShellRoute`, no shell scaffold. The
+editor is `/`; entity detail is the child route `/entity/:id`, reached with
+`context.push`. Push/pop is a View side effect, done in `BlocListener`s.
+
+## Folder structure
 lib/
-  main.dart
-  app.dart
-  config/
-    routing/
-    theme/
-  core/
-    models/          # Freezed data classes shared across features
-    services/        # Raw I/O — one source per service
-    repositories/    # Orchestration — what Cubits depend on
-    errors/          # Failure sealed class (add when needed)
-    widgets/         # Shared UI widgets
-  features/
-    <feature>/
-      cubit/
-      ui/
-        screens/
-        widgets/
-```
+main.dart
+app.dart                     # providers + MaterialApp.router
+config/
+routing/{router,routes}.dart
+theme/app_theme.dart
+core/
+id.dart                    # Id.generate()
+models/                    # pure Freezed data
+services/                  # raw I/O, throws
+repositories/              # orchestration — the Cubit's only dependency
+widgets/                   # shared dialogs (ConfirmDialog, NameInputDialog)
+features/
+<feature>/
+cubit/                   # cubit + sealed state (+ pure transforms)
+ui/
+screens/
+widgets/
+Current features: `diagrams` (the collection + drawer browser), `editor` (the
+open diagram: canvas, entities, fields).
 
-### Data flow
-
-```
-JSON file on disk
-  ↕  (DiagramFileService: load/save)
-DiagramRepository
-  ↕  (exposes clean API, handles errors)
-Cubit (holds current state, exposes intent-named methods)
-  ↕
-UI (reads state, calls cubit methods)
-```
-
-## Data model (`lib/core/models/`)
-Five files, all Freezed 3.x with `json_serializable`:
-
-- **`diagram.dart`** — `id`, `name`, `List<Entity>`, `List<Relation>`
-- **`entity.dart`** — `id`, `name`, `x`/`y` (canvas pos), `List<EntityField>`,
-  optional `comment`
-- **`entity_field.dart`** — `id`, `name`, `FieldType type`, plus flags:
-  `isPrimaryKey`, `isNullable`, `isUnique`, `isAutoIncrement`, and optional
-  `defaultValue`, `check`, `comment`. FK-ness is derived from relations.
-- **`field_type.dart`** — sealed union of SQL types. Parameterised where it
-  matters: `varchar(length)`, `decimal(precision, scale)`,
-  `enumeration(values)`. Serialized with `unionKey: 'type'`, `unionValueCase: FreezedUnionCase.snake`.
-- **`relation.dart`** — `parent` and `child` `RelationEnd`s (each with
-  `entityId` + `Cardinality`), `List<FieldLink>` for FK column mapping,
-  `onDelete`/`onUpdate` `ReferentialAction`, `isIdentifying`, optional `name`.
-  Enums for `Cardinality` and `ReferentialAction` live in this file too.
-
-## UX decisions
-- **Sidebar** — collapsible, lists diagrams. Create / rename / delete / select.
-- **Canvas** — `InteractiveViewer` with draggable entity nodes and relation
-  connectors drawn between them.
-- **Editing an entity** — tap it on canvas → navigates to a detail page
-  (via go_router) where you edit fields, types, constraints.
-- **Export** — SQL DDL (`CREATE TABLE` statements) is the priority export.
-  PNG/SVG maybe later.
+## Data model (`core/models/`)
+- **diagram.dart** — `id`, `name`, `List<Entity>`, `List<Relation>`.
+- **entity.dart** — `id`, `name`, `x`/`y`, `List<EntityField>`, optional `comment`.
+- **entity_field.dart** — `id`, `name`, `FieldType type`, flags (`isPrimaryKey`,
+  `isNullable`, `isUnique`, `isAutoIncrement`), optional `defaultValue`/`check`/
+  `comment`. FK-ness is derived from relations, never stored.
+- **field_type.dart** — sealed union of SQL types; parameterised where it matters
+  (`varchar(length)`, `decimal(precision, scale)`, `enumeration(values)`).
+  `unionKey: 'type'`, snake-cased values.
+- **relation.dart** — `parent`/`child` `RelationEnd`s, `List<FieldLink>`,
+  `onDelete`/`onUpdate`, `isIdentifying`, optional `name`; the `Cardinality` and
+  `ReferentialAction` enums live here too.
 
 ## Rules for Claude — follow without being asked
 
-### Scoping
-- **One file at a time.** Never dump a whole feature. I'll ask for the next
-  file when I'm ready.
-- **Simple changes** — state what to add and where, no need to reprint the whole file.
+### Architecture
+- Respect the layer direction: View → Cubit → Repository → Service. Never skip a
+  layer (no I/O in a widget, no `BuildContext` in a Cubit).
+- State is always a sealed Freezed union with explicit variants — never a
+  status-enum-plus-nullable-fields. UI switches exhaustively; never force-unwrap
+  (`!`) a state field.
+- Model-changing logic is a pure extension returning a new value, in the owning
+  feature. Models themselves stay logic-free.
+- Side effects (navigation, snackbars) belong in the View via `BlocListener`,
+  never in a Cubit.
 
 ### Code style
-- One class per file, keep files small.
-- Use Freezed 3.x syntax (`abstract class` / `sealed class`, not bare `class`).
-- Exhaustive `switch` on sealed unions — never use a default/wildcard case.
-- Follow very_good_analysis lint rules.
-- Prefer `const` constructors.
-- Cubits expose intent-named methods (`loadDiagrams()`, `addDiagram(...)`). No setters, no `BuildContext`.
-- Side effects (navigation, snackbars) are the View's job via `BlocListener`.
+- One class per file; keep files small (~50 lines). The only exception is a
+  single cohesive control that would get harder to read if split (e.g. the
+  field-type picker).
+- Freezed 3.x: `abstract class` for single classes, `sealed class` for unions.
+- Exhaustive `switch` on unions — never a `default`/wildcard `_`.
+- Prefer `const`. Intent-named Cubit methods; no setters.
+- Follow very_good_analysis.
 
 ### What NOT to do
-- No `createdAt` / `updatedAt` / `modifiedBy` or any metadata fields unless
-  explicitly asked. This is a local-only app.
-- No fields "that might be useful later" — only what's needed right now.
-- No `json_key`, no `JsonConverter` unless strictly necessary.
-- No hardcoded pixel values for layout — use theme, fractions, or flex.
-- No over-engineered abstractions beyond the three-layer architecture above.
-- Don't suggest adding packages I haven't approved.
-- Don't reorganize my folder structure without asking.
+- No `createdAt`/`updatedAt`/metadata fields, ever, unless asked.
+- No fields, params, or abstractions "for later." Build only what's needed now.
+- No new layers beyond the four above.
+- No `JsonConverter`/`json_key` unless strictly necessary.
+- No hardcoded pixels for responsive layout — use theme, fractions, or flex
+  (fixed spacing constants are fine).
+- Don't add packages or reorganise folders without asking.
 
 ### Communication
-- Keep explanations short. If I need more detail I'll ask.
-- When showing code, show the full file — no "// ... rest unchanged" elisions.
-- Simple changes: state what to add/change and where, skip reprinting the file.
-- If something is ambiguous, ask one question, don't guess.
-
-## Current file tree
-```
-lib/
-  app.dart
-  main.dart
-  config/
-    routing/
-      router.dart
-      routes.dart
-      shell.dart
-    theme/
-      app_theme.dart
-  core/
-    models/
-      diagram.dart
-      entity.dart
-      entity_field.dart
-      field_type.dart
-      relation.dart
-    services/        # next: diagram_file_service.dart
-    repositories/    # next: diagram_repository.dart
-  features/
-    home/
-      ui/
-        screens/
-          home_screen.dart
-    sidebar/
-      ui/
-        widgets/
-          diagram_list.dart
-          sidebar.dart
-          sidebar_card.dart
-          sidebar_footer.dart
-          sidebar_header.dart
-```
+- Keep explanations short.
+- Show the full file when showing code — no "// ... unchanged" elisions.
+- For a simple change, say what to change and where; don't reprint the file.
+- One file at a time unless I ask for more.
+- If something's ambiguous, ask one question; don't guess.

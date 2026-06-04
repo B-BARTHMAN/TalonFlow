@@ -1,154 +1,105 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:talonflow/core/id.dart';
 import 'package:talonflow/core/models/diagram.dart';
 import 'package:talonflow/core/models/entity.dart';
 import 'package:talonflow/core/models/entity_field.dart';
 import 'package:talonflow/core/models/field_type.dart';
 import 'package:talonflow/core/repositories/diagram_repository.dart';
+import 'package:talonflow/features/editor/cubit/diagram_edits.dart';
 import 'package:talonflow/features/editor/cubit/diagram_editor_state.dart';
-import 'package:uuid/uuid.dart';
 
 class DiagramEditorCubit extends Cubit<DiagramEditorState> {
   DiagramEditorCubit({required DiagramRepository repository})
     : _repository = repository,
-      super(const DiagramEditorState());
+      super(const DiagramEditorState.initial());
 
   final DiagramRepository _repository;
-  static const _uuid = Uuid();
 
   static const _placementOrigin = 40.0;
   static const _placementStep = 32.0;
 
   Future<void> openDiagram(String id) async {
-    emit(state.copyWith(status: DiagramEditorStatus.loading));
+    emit(const DiagramEditorState.loading());
     try {
-      final diagram = await _repository.load(id);
-      emit(
-        state.copyWith(status: DiagramEditorStatus.loaded, diagram: diagram),
-      );
+      emit(DiagramEditorState.loaded(await _repository.load(id)));
     } catch (e) {
-      emit(
-        state.copyWith(status: DiagramEditorStatus.error, error: e.toString()),
-      );
+      emit(DiagramEditorState.error(e.toString()));
     }
   }
 
-  /// Clear the canvas back to the empty state — e.g. the open diagram was
-  /// deleted from the list.
-  void closeDiagram() => emit(const DiagramEditorState());
+  void closeDiagram() => emit(const DiagramEditorState.initial());
 
-  Future<void> addEntity() async {
-    final diagram = state.diagram;
-    if (diagram == null) return;
-
-    final count = diagram.entities.length;
+  Future<void> addEntity() {
+    final count = state.diagramOrNull?.entities.length ?? 0;
     final position = _placementOrigin + _placementStep * count;
-    final entity = Entity(
-      id: _uuid.v4(),
-      name: 'Entity ${count + 1}',
-      x: position,
-      y: position,
+    return _edit(
+      (d) => d.addEntity(
+        Entity(
+          id: Id.generate(),
+          name: 'Entity ${count + 1}',
+          x: position,
+          y: position,
+        ),
+      ),
     );
-
-    await _apply(diagram.copyWith(entities: [...diagram.entities, entity]));
   }
 
   Future<void> renameEntity(String id, String name) =>
-      _updateEntity(id, (entity) => entity.copyWith(name: name));
+      _edit((d) => d.updateEntity(id, (e) => e.copyWith(name: name)));
 
-  Future<void> deleteEntity(String id) async {
-    final diagram = state.diagram;
+  Future<void> deleteEntity(String id) => _edit((d) => d.removeEntity(id));
+
+  Future<void> addField(String entityId) => _edit(
+    (d) => d.updateEntity(
+      entityId,
+      (e) => e.addField(
+        EntityField(
+          id: Id.generate(),
+          name: 'column_${e.fields.length + 1}',
+          type: const FieldType.integer(),
+        ),
+      ),
+    ),
+  );
+
+  Future<void> updateField(String entityId, EntityField field) =>
+      _edit((d) => d.updateEntity(entityId, (e) => e.updateField(field)));
+
+  Future<void> removeField(String entityId, String fieldId) =>
+      _edit((d) => d.updateEntity(entityId, (e) => e.removeField(fieldId)));
+
+  /// Live position update during a drag — no disk write. Persisted by
+  /// [commitLayout] when the drag ends.
+  void moveEntity(String id, double dx, double dy) {
+    final diagram = state.diagramOrNull;
     if (diagram == null) return;
-
-    await _apply(
-      diagram.copyWith(
-        entities: diagram.entities.where((e) => e.id != id).toList(),
-        // Drop relations attached to the removed table, like dropping its FKs.
-        relations: diagram.relations
-            .where((r) => r.parent.entityId != id && r.child.entityId != id)
-            .toList(),
+    emit(
+      DiagramEditorState.loaded(
+        diagram.updateEntity(id, (e) => e.moveBy(dx, dy)),
       ),
     );
   }
 
-  Future<void> addField(String entityId) => _updateEntity(
-    entityId,
-    (entity) => entity.copyWith(
-      fields: [
-        ...entity.fields,
-        EntityField(
-          id: _uuid.v4(),
-          name: 'column_${entity.fields.length + 1}',
-          type: const FieldType.integer(),
-        ),
-      ],
-    ),
-  );
-
-  Future<void> removeField(String entityId, String fieldId) => _updateEntity(
-    entityId,
-    (entity) => entity.copyWith(
-      fields: entity.fields.where((f) => f.id != fieldId).toList(),
-    ),
-  );
-
-  /// Live position update during a drag — no disk write. Persisted once when
-  /// the drag ends, via [commitLayout].
-  void moveEntity(String id, double dx, double dy) {
-    final diagram = state.diagram;
-    if (diagram == null) return;
-
-    final entities = [
-      for (final entity in diagram.entities)
-        if (entity.id == id)
-          entity.copyWith(x: entity.x + dx, y: entity.y + dy)
-        else
-          entity,
-    ];
-    emit(state.copyWith(diagram: diagram.copyWith(entities: entities)));
-  }
-
-  /// Persist the current layout — call once when a drag ends, not per frame.
   Future<void> commitLayout() async {
-    final diagram = state.diagram;
+    final diagram = state.diagramOrNull;
     if (diagram != null) await _save(diagram);
   }
 
-  /// Replace the entity with [id] using [edit], then emit + persist.
-  Future<void> _updateEntity(String id, Entity Function(Entity) edit) async {
-    final diagram = state.diagram;
+  /// Apply a transform, emit optimistically, then persist.
+  Future<void> _edit(Diagram Function(Diagram) transform) async {
+    final diagram = state.diagramOrNull;
     if (diagram == null) return;
-
-    await _apply(
-      diagram.copyWith(
-        entities: [
-          for (final entity in diagram.entities)
-            if (entity.id == id) edit(entity) else entity,
-        ],
-      ),
-    );
-  }
-
-  /// Emit an edited diagram immediately, then persist it.
-  Future<void> _apply(Diagram updated) async {
-    emit(state.copyWith(diagram: updated));
+    final updated = transform(diagram);
+    emit(DiagramEditorState.loaded(updated));
     await _save(updated);
   }
 
+  /// Persist [diagram]. On failure, keep it on screen and surface the error.
   Future<void> _save(Diagram diagram) async {
     try {
       await _repository.save(diagram);
-    } catch (e, st) {
-      addError(e, st);
+    } catch (e) {
+      emit(DiagramEditorState.loaded(diagram, saveError: e.toString()));
     }
   }
-
-  Future<void> updateField(String entityId, EntityField field) => _updateEntity(
-    entityId,
-    (entity) => entity.copyWith(
-      fields: [
-        for (final f in entity.fields)
-          if (f.id == field.id) field else f,
-      ],
-    ),
-  );
 }

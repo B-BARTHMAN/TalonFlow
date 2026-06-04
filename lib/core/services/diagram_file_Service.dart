@@ -9,24 +9,24 @@ class DiagramFileService {
 
   Future<Directory> _dir() async {
     final base = await getApplicationDocumentsDirectory();
-    final dir = Directory('${base.path}/$_dirName');
-    if (!dir.existsSync()) await dir.create(recursive: true);
-    return dir;
+    return Directory('${base.path}/$_dirName').create(recursive: true);
   }
 
   File _file(Directory dir, String id) => File('${dir.path}/$id.json');
 
   Future<List<Diagram>> loadAll() async {
     final dir = await _dir();
-    final files = dir.listSync().whereType<File>().where(
-      (f) => f.path.endsWith('.json'),
-    );
-
     final diagrams = <Diagram>[];
-    for (final file in files) {
-      final json =
-          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-      diagrams.add(Diagram.fromJson(json));
+    await for (final entity in dir.list()) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final json =
+            jsonDecode(await entity.readAsString()) as Map<String, dynamic>;
+        diagrams.add(Diagram.fromJson(json));
+      } on Object catch (_) {
+        // Skip a corrupt/unreadable file rather than failing the whole load.
+        continue;
+      }
     }
     return diagrams;
   }

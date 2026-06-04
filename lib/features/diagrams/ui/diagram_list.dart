@@ -11,23 +11,22 @@ class DiagramList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<DiagramListCubit, DiagramListState>(
-      builder: (context, state) => switch (state.status) {
-        DiagramListStatus.initial || DiagramListStatus.loading => const Center(
+      builder: (context, state) => switch (state) {
+        DiagramListInitial() || DiagramListLoading() => const Center(
           child: CircularProgressIndicator(),
         ),
-        DiagramListStatus.error => Center(
+        DiagramListError(:final message) => Center(
           child: Text(
-            state.error ?? 'Something went wrong',
+            message,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ),
-        DiagramListStatus.loaded when state.diagrams.isEmpty =>
+        DiagramListLoaded(:final diagrams) when diagrams.isEmpty =>
           const DiagramListEmpty(),
-        DiagramListStatus.loaded => ListView.builder(
+        DiagramListLoaded(:final diagrams) => ListView.builder(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: state.diagrams.length,
-          itemBuilder: (_, index) =>
-              DiagramTile(diagram: state.diagrams[index]),
+          itemCount: diagrams.length,
+          itemBuilder: (_, index) => DiagramTile(diagram: diagrams[index]),
         ),
       },
     );

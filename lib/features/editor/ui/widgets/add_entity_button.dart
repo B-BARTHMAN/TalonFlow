@@ -9,11 +9,10 @@ class AddEntityButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<DiagramEditorCubit, DiagramEditorState>(
-      buildWhen: (previous, current) => previous.status != current.status,
+      buildWhen: (previous, current) =>
+          (previous is DiagramEditorLoaded) != (current is DiagramEditorLoaded),
       builder: (context, state) {
-        if (state.status != DiagramEditorStatus.loaded) {
-          return const SizedBox.shrink();
-        }
+        if (state is! DiagramEditorLoaded) return const SizedBox.shrink();
         return FloatingActionButton(
           onPressed: () async {
             await context.read<DiagramEditorCubit>().addEntity();

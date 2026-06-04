@@ -1,26 +1,25 @@
+import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:talonflow/core/models/diagram.dart';
 
-enum DiagramEditorStatus { initial, loading, loaded, error }
+part 'diagram_editor_state.freezed.dart';
 
-class DiagramEditorState {
-  const DiagramEditorState({
-    this.status = DiagramEditorStatus.initial,
-    this.diagram,
-    this.error,
-  });
+@freezed
+sealed class DiagramEditorState with _$DiagramEditorState {
+  const factory DiagramEditorState.initial() = DiagramEditorInitial;
+  const factory DiagramEditorState.loading() = DiagramEditorLoading;
+  const factory DiagramEditorState.loaded(
+    Diagram diagram, {
+    String? saveError,
+  }) = DiagramEditorLoaded;
+  const factory DiagramEditorState.error(String message) = DiagramEditorError;
 
-  final DiagramEditorStatus status;
+  const DiagramEditorState._();
 
-  final Diagram? diagram;
-  final String? error;
-
-  DiagramEditorState copyWith({
-    DiagramEditorStatus? status,
-    Diagram? diagram,
-    String? error,
-  }) => DiagramEditorState(
-    status: status ?? this.status,
-    diagram: diagram ?? this.diagram,
-    error: error ?? this.error,
-  );
+  /// The open diagram, or null when nothing is loaded.
+  Diagram? get diagramOrNull => switch (this) {
+    DiagramEditorLoaded(:final diagram) => diagram,
+    DiagramEditorInitial() ||
+    DiagramEditorLoading() ||
+    DiagramEditorError() => null,
+  };
 }

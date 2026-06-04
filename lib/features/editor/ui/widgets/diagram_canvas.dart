@@ -11,18 +11,15 @@ class DiagramCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<DiagramEditorCubit, DiagramEditorState>(
-      builder: (context, state) => switch (state.status) {
-        DiagramEditorStatus.initial => const CanvasMessage(
+      builder: (context, state) => switch (state) {
+        DiagramEditorInitial() => const CanvasMessage(
           'Open a diagram from the menu, or create a new one.',
         ),
-        DiagramEditorStatus.loading => const Center(
+        DiagramEditorLoading() => const Center(
           child: CircularProgressIndicator(),
         ),
-        DiagramEditorStatus.error => CanvasMessage(
-          state.error ?? 'Could not open the diagram.',
-        ),
-        // loaded -> diagram is non-null.
-        DiagramEditorStatus.loaded => DiagramSurface(diagram: state.diagram!),
+        DiagramEditorError(:final message) => CanvasMessage(message),
+        DiagramEditorLoaded(:final diagram) => DiagramSurface(diagram: diagram),
       },
     );
   }

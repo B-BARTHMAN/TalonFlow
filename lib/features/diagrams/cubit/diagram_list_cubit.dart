@@ -1,55 +1,52 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:talonflow/core/models/diagram.dart';
 import 'package:talonflow/core/repositories/diagram_repository.dart';
 import 'package:talonflow/features/diagrams/cubit/diagram_list_state.dart';
 
 class DiagramListCubit extends Cubit<DiagramListState> {
   DiagramListCubit({required DiagramRepository repository})
     : _repository = repository,
-      super(const DiagramListState());
+      super(const DiagramListState.initial());
 
   final DiagramRepository _repository;
 
+  List<Diagram> get _diagrams => switch (state) {
+    DiagramListLoaded(:final diagrams) => diagrams,
+    DiagramListInitial() ||
+    DiagramListLoading() ||
+    DiagramListError() => const [],
+  };
+
   Future<void> loadDiagrams() async {
-    emit(state.copyWith(status: DiagramListStatus.loading));
+    emit(const DiagramListState.loading());
     try {
-      final diagrams = await _repository.loadAll();
-      emit(
-        state.copyWith(status: DiagramListStatus.loaded, diagrams: diagrams),
-      );
+      emit(DiagramListState.loaded(await _repository.loadAll()));
     } catch (e) {
-      emit(
-        state.copyWith(status: DiagramListStatus.error, error: e.toString()),
-      );
+      emit(DiagramListState.error(e.toString()));
     }
   }
 
   Future<void> createDiagram(String name) async {
     try {
       final diagram = await _repository.create(name);
-      emit(state.copyWith(diagrams: [...state.diagrams, diagram]));
+      emit(DiagramListState.loaded([..._diagrams, diagram]));
     } catch (e) {
-      emit(
-        state.copyWith(status: DiagramListStatus.error, error: e.toString()),
-      );
+      emit(DiagramListState.error(e.toString()));
     }
   }
 
   Future<void> renameDiagram(String id, String name) async {
     try {
-      final diagram = state.diagrams.firstWhere((d) => d.id == id);
+      final diagram = _diagrams.firstWhere((d) => d.id == id);
       await _repository.rename(diagram, name);
       emit(
-        state.copyWith(
-          diagrams: [
-            for (final d in state.diagrams)
-              if (d.id == id) d.copyWith(name: name) else d,
-          ],
-        ),
+        DiagramListState.loaded([
+          for (final d in _diagrams)
+            if (d.id == id) d.copyWith(name: name) else d,
+        ]),
       );
     } catch (e) {
-      emit(
-        state.copyWith(status: DiagramListStatus.error, error: e.toString()),
-      );
+      emit(DiagramListState.error(e.toString()));
     }
   }
 
@@ -57,14 +54,10 @@ class DiagramListCubit extends Cubit<DiagramListState> {
     try {
       await _repository.delete(id);
       emit(
-        state.copyWith(
-          diagrams: state.diagrams.where((d) => d.id != id).toList(),
-        ),
+        DiagramListState.loaded(_diagrams.where((d) => d.id != id).toList()),
       );
     } catch (e) {
-      emit(
-        state.copyWith(status: DiagramListStatus.error, error: e.toString()),
-      );
+      emit(DiagramListState.error(e.toString()));
     }
   }
 }

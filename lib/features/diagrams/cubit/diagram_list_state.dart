@@ -1,25 +1,13 @@
+import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:talonflow/core/models/diagram.dart';
 
-enum DiagramListStatus { initial, loading, loaded, error }
+part 'diagram_list_state.freezed.dart';
 
-class DiagramListState {
-  const DiagramListState({
-    this.status = DiagramListStatus.initial,
-    this.diagrams = const [],
-    this.error,
-  });
-
-  final DiagramListStatus status;
-  final List<Diagram> diagrams;
-  final String? error;
-
-  DiagramListState copyWith({
-    DiagramListStatus? status,
-    List<Diagram>? diagrams,
-    String? error,
-  }) => DiagramListState(
-    status: status ?? this.status,
-    diagrams: diagrams ?? this.diagrams,
-    error: error ?? this.error,
-  );
+@freezed
+sealed class DiagramListState with _$DiagramListState {
+  const factory DiagramListState.initial() = DiagramListInitial;
+  const factory DiagramListState.loading() = DiagramListLoading;
+  const factory DiagramListState.loaded(List<Diagram> diagrams) =
+      DiagramListLoaded;
+  const factory DiagramListState.error(String message) = DiagramListError;
 }

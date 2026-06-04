@@ -33,7 +33,7 @@ class EntityNode extends StatelessWidget {
               ColoredBox(
                 color: colors.primaryContainer,
                 child: Padding(
-                  padding: const EdgeInsetsGeometry.symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
                   ),
