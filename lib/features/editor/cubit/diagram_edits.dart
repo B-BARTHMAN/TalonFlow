@@ -21,7 +21,7 @@ extension DiagramEdits on Diagram {
 }
 
 extension EntityEdits on Entity {
-  Entity moveBy(double dx, double dy) => copyWith(x: x + dx, y: dy);
+  Entity moveBy(double dx, double dy) => copyWith(x: x + dx, y: y + dy);
 
   Entity addField(EntityField field) => copyWith(fields: [...fields, field]);
 

@@ -26,6 +26,8 @@ class EntityFieldTile extends StatelessWidget {
       if (!field.isNullable) 'NOT NULL',
       if (field.isUnique) 'UNIQUE',
       if (field.isAutoIncrement) 'AUTO INC',
+      if (field.defaultValue != null) 'DEFAULT ${field.defaultValue}',
+      if (field.check != null) 'CHECK (${field.check})',
     ];
     return ListTile(
       leading: field.isPrimaryKey ? const Icon(Icons.key) : null,

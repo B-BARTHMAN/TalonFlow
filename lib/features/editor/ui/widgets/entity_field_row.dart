@@ -12,31 +12,53 @@ class EntityFieldRow extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
+    final notes = <String>[
+      if (field.defaultValue != null) '= ${field.defaultValue}',
+      if (field.check != null) 'check (${field.check})',
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 14,
-            child: field.isPrimaryKey
-                ? Icon(Icons.key, size: 14, color: colors.primary)
-                : null,
+          Row(
+            children: [
+              SizedBox(
+                width: 14,
+                child: field.isPrimaryKey
+                    ? Icon(Icons.key, size: 14, color: colors.primary)
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  field.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                field.isNullable ? '${field.type.label}?' : field.type.label,
+                style: textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              field.name,
-              overflow: TextOverflow.ellipsis,
-              style: textTheme.bodySmall,
+          if (notes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 22, top: 2),
+              child: Text(
+                notes.join('  ·  '),
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            field.type.label,
-            style: textTheme.labelSmall?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
         ],
       ),
     );
